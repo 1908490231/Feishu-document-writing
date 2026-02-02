@@ -122,6 +122,7 @@ Space ID 是知识库的内部标识（数字），可通过以下方式获取�
 | 链接 | `[text](url)` | ✓ |
 | 图片 | `![alt](path)` | ✓ |
 | 分割线 | `---` | ✓ |
+| 表格 | `| A | B |` | ✓ |
 
 ## 作为 Claude Code 技能使用
 
@@ -234,6 +235,79 @@ PATCH /docx/v1/documents/{document_id}/blocks/{block_id}
 3. **必须使用 `replace_image`** - 这是飞书专门为图片块设计的更新字段
 
 这个三步流程是飞书 docx 文档 API 的设计特点，官方文档中没有明确说明，需要通过实践摸索。
+
+### 飞书 docx 文档表格创建流程
+
+飞书表格的创建和填充也需要特殊处理：
+
+#### 步骤 1：创建表格块
+
+```bash
+POST /docx/v1/documents/{document_id}/blocks/{block_id}/children
+```
+
+```json
+{
+  "children": [
+    {
+      "block_type": 31,
+      "table": {
+        "property": {
+          "row_size": 4,
+          "column_size": 3
+        }
+      }
+    }
+  ]
+}
+```
+
+返回值中包含表格块 `block_id` 和所有单元格的 `block_id`。
+
+#### 步骤 2：获取单元格列表
+
+```bash
+GET /docx/v1/documents/{document_id}/blocks/{table_block_id}/children
+```
+
+**重点**：表格的子块直接就是单元格（block_type=32），不是行！单元格按**行优先顺序**排列：
+
+```
+4行3列的表格，单元格顺序为：
+[0,0] [0,1] [0,2] [1,0] [1,1] [1,2] [2,0] [2,1] [2,2] [3,0] [3,1] [3,2]
+```
+
+#### 步骤 3：填充单元格内容
+
+```bash
+POST /docx/v1/documents/{document_id}/blocks/{cell_block_id}/children
+```
+
+```json
+{
+  "children": [
+    {
+      "block_type": 2,
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "单元格内容"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+#### 常见错误
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| 只有第一列有内容 | 误以为表格子块是行 | 直接遍历所有单元格，按行优先顺序填充 |
+| 部分单元格为空 | API 调用过快被限流 | 每次填充后添加 100ms 延时 |
 
 ## 许可证
 

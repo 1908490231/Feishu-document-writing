@@ -15,15 +15,18 @@ class MarkdownParser:
 
     # 图片占位符标记
     IMAGE_PLACEHOLDER = "__IMAGE_PLACEHOLDER__"
+    # 表格占位符标记
+    TABLE_PLACEHOLDER = "__TABLE_PLACEHOLDER__"
 
     def __init__(self, md_file_path: str):
         self.md_dir = Path(md_file_path).parent
         self.pending_images: List[Tuple[int, str]] = []  # [(block_index, image_path), ...]
+        self.pending_tables: List[Tuple[int, List[List[str]]]] = []  # [(block_index, table_data), ...]
 
     def parse(self, content: str) -> List[Dict[str, Any]]:
         """
         解析 Markdown 内容为飞书 Block 列表
-        图片会生成占位符，需要后续处理
+        图片和表格会生成占位符，需要后续处理
 
         Returns:
             blocks 列表
@@ -54,6 +57,15 @@ class MarkdownParser:
                 i += 1  # 跳过结束的 ```
                 blocks.append(self._create_code_block("\n".join(code_lines), language))
                 continue
+
+            # 表格检测（以 | 开头的行）
+            if line.strip().startswith("|") and "|" in line[1:]:
+                table_data, consumed = self._parse_table(lines, i)
+                if table_data:
+                    block = self._create_table_block(table_data, len(blocks))
+                    blocks.append(block)
+                    i += consumed
+                    continue
 
             # 图片
             img_match = re.match(r"!\[(.*?)\]\((.*?)\)", line)
@@ -108,6 +120,70 @@ class MarkdownParser:
             i += 1
 
         return blocks
+
+    def _parse_table(self, lines: List[str], start_idx: int) -> Tuple[List[List[str]], int]:
+        """
+        解析 Markdown 表格
+
+        Args:
+            lines: 所有行
+            start_idx: 表格起始行索引
+
+        Returns:
+            (table_data, consumed_lines) - 表格数据和消耗的行数
+        """
+        table_rows = []
+        i = start_idx
+
+        while i < len(lines):
+            line = lines[i].strip()
+            # 检查是否是表格行
+            if not line.startswith("|"):
+                break
+
+            # 解析单元格
+            cells = self._parse_table_row(line)
+            if not cells:
+                break
+
+            # 跳过分隔行（如 |---|---|---|）
+            if all(re.match(r"^[\-:]+$", cell.strip()) for cell in cells):
+                i += 1
+                continue
+
+            table_rows.append(cells)
+            i += 1
+
+        consumed = i - start_idx
+        return table_rows, consumed
+
+    def _parse_table_row(self, line: str) -> List[str]:
+        """解析表格行，返回单元格列表"""
+        # 去掉首尾的 |
+        line = line.strip()
+        if line.startswith("|"):
+            line = line[1:]
+        if line.endswith("|"):
+            line = line[:-1]
+
+        # 按 | 分割
+        cells = [cell.strip() for cell in line.split("|")]
+        return cells
+
+    def _create_table_block(self, table_data: List[List[str]], block_index: int) -> Dict:
+        """创建表格块占位符"""
+        # 记录待处理的表格
+        self.pending_tables.append((block_index, table_data))
+
+        rows = len(table_data)
+        cols = max(len(row) for row in table_data) if table_data else 0
+
+        return {
+            "block_type": self.TABLE_PLACEHOLDER,
+            "table_data": table_data,
+            "rows": rows,
+            "cols": cols
+        }
 
     def _create_text_elements(self, text: str) -> List[Dict]:
         """创建文本元素，处理内联格式"""

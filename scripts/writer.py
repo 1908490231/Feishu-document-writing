@@ -103,8 +103,8 @@ class FeishuWriter:
             except Exception as e:
                 return {"success": False, "document_id": None, "message": f"创建知识库文档失败: {e}"}
 
-            # 写入内容（包含图片处理）
-            uploaded_images = self._write_content_with_images(doc_id, blocks, parser.pending_images)
+            # 写入内容（包含图片和表格处理）
+            uploaded_images = self._write_content_with_images(doc_id, blocks, parser.pending_images, parser.pending_tables)
 
             return {
                 "success": True,
@@ -123,8 +123,8 @@ class FeishuWriter:
             except Exception as e:
                 return {"success": False, "document_id": None, "message": f"创建文档失败: {e}"}
 
-            # 写入内容（包含图片处理）
-            uploaded_images = self._write_content_with_images(doc_id, blocks, parser.pending_images)
+            # 写入内容（包含图片和表格处理）
+            uploaded_images = self._write_content_with_images(doc_id, blocks, parser.pending_images, parser.pending_tables)
 
             return {
                 "success": True,
@@ -133,14 +133,15 @@ class FeishuWriter:
                 "uploaded_images": uploaded_images
             }
 
-    def _write_content_with_images(self, doc_id: str, blocks: List[Dict], pending_images: List) -> int:
+    def _write_content_with_images(self, doc_id: str, blocks: List[Dict], pending_images: List, pending_tables: List) -> int:
         """
-        写入内容，包含图片处理，保持原始顺序
+        写入内容，包含图片和表格处理，保持原始顺序
 
         Args:
             doc_id: 文档 ID
             blocks: 所有 blocks
             pending_images: 待上传的图片列表 [(block_index, image_path), ...]
+            pending_tables: 待处理的表格列表 [(block_index, table_data), ...]
 
         Returns:
             成功上传的图片数量
@@ -149,9 +150,11 @@ class FeishuWriter:
 
         # 构建图片索引映射
         image_map = {idx: path for idx, path in pending_images}
+        # 构建表格索引映射
+        table_map = {idx: data for idx, data in pending_tables}
 
         # 按顺序处理每个 block
-        # 为了保持顺序，需要分批写入：遇到图片时先写入之前的普通块，再处理图片
+        # 为了保持顺序，需要分批写入：遇到图片或表格时先写入之前的普通块，再处理特殊块
         current_batch = []
 
         for i, block in enumerate(blocks):
@@ -181,6 +184,26 @@ class FeishuWriter:
                     uploaded_count += 1
                 else:
                     print(f"警告: 更新图片块失败 - {image_path}")
+
+            elif i in table_map:
+                # 遇到表格，先写入之前积累的普通块
+                if current_batch:
+                    self.doc_writer.append_blocks(doc_id, doc_id, current_batch)
+                    current_batch = []
+
+                # 处理表格
+                table_data = table_map[i]
+                rows = len(table_data)
+                cols = max(len(row) for row in table_data) if table_data else 0
+
+                if rows > 0 and cols > 0:
+                    # 1. 创建表格
+                    table_block_id = self.doc_writer.create_table(doc_id, doc_id, rows, cols)
+                    if table_block_id:
+                        # 2. 填充表格内容
+                        self.doc_writer.fill_table(doc_id, table_block_id, table_data)
+                    else:
+                        print(f"警告: 创建表格失败")
             else:
                 # 普通块，加入当前批次
                 current_batch.append(block)
@@ -208,8 +231,8 @@ class FeishuWriter:
         # 清空原内容
         self.doc_writer.delete_document_content(document_id)
 
-        # 写入新内容（包含图片处理）
-        uploaded_images = self._write_content_with_images(document_id, blocks, parser.pending_images)
+        # 写入新内容（包含图片和表格处理）
+        uploaded_images = self._write_content_with_images(document_id, blocks, parser.pending_images, parser.pending_tables)
 
         return {
             "success": True,

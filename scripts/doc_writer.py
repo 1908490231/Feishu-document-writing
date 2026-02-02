@@ -3,7 +3,8 @@
 飞书文档写入模块
 """
 
-from typing import Dict, List, Tuple, Optional
+import time
+from typing import Dict, List, Tuple, Optional, Any
 
 import requests
 
@@ -261,4 +262,196 @@ class FeishuDocWriter:
             return True
         except Exception as e:
             print(f"警告: 更新图片块异常: {e}")
+            return False
+
+    def create_table(self, document_id: str, block_id: str, rows: int, cols: int) -> Optional[str]:
+        """
+        创建表格块
+
+        Args:
+            document_id: 文档 ID
+            block_id: 父块 ID
+            rows: 行数
+            cols: 列数
+
+        Returns:
+            创建的表格块 block_id，失败返回 None
+        """
+        url = f"{self.BASE_URL}/docx/v1/documents/{document_id}/blocks/{block_id}/children"
+        data = {
+            "children": [
+                {
+                    "block_type": 31,
+                    "table": {
+                        "property": {
+                            "row_size": rows,
+                            "column_size": cols
+                        }
+                    }
+                }
+            ]
+        }
+
+        try:
+            resp = requests.post(url, headers=self._headers(), json=data)
+            resp.raise_for_status()
+            result = resp.json()
+
+            if result.get("code") != 0:
+                print(f"警告: 创建表格失败: {result.get('msg')}")
+                return None
+
+            children = result.get("data", {}).get("children", [])
+            if children:
+                return children[0].get("block_id")
+            return None
+        except Exception as e:
+            print(f"警告: 创建表格异常: {e}")
+            return None
+
+    def get_table_cells(self, document_id: str, table_block_id: str) -> List[Dict[str, Any]]:
+        """
+        获取表格的所有单元格信息
+
+        Args:
+            document_id: 文档 ID
+            table_block_id: 表格块 ID
+
+        Returns:
+            单元格列表，每个元素包含 block_id 和位置信息
+        """
+        url = f"{self.BASE_URL}/docx/v1/documents/{document_id}/blocks/{table_block_id}/children"
+
+        try:
+            resp = requests.get(url, headers=self._headers())
+            resp.raise_for_status()
+            result = resp.json()
+
+            if result.get("code") != 0:
+                print(f"警告: 获取表格子块失败: {result.get('msg')}")
+                return []
+
+            # 获取所有行
+            rows = result.get("data", {}).get("items", [])
+            cells = []
+
+            # 遍历每一行获取单元格
+            for row in rows:
+                row_id = row.get("block_id")
+                row_children_url = f"{self.BASE_URL}/docx/v1/documents/{document_id}/blocks/{row_id}/children"
+                row_resp = requests.get(row_children_url, headers=self._headers())
+                row_resp.raise_for_status()
+                row_result = row_resp.json()
+
+                if row_result.get("code") == 0:
+                    row_cells = row_result.get("data", {}).get("items", [])
+                    cells.extend(row_cells)
+
+            return cells
+        except Exception as e:
+            print(f"警告: 获取表格单元格异常: {e}")
+            return []
+
+    def fill_table_cell(self, document_id: str, cell_block_id: str, content: str) -> bool:
+        """
+        填充表格单元格内容
+
+        Args:
+            document_id: 文档 ID
+            cell_block_id: 单元格块 ID
+            content: 要填充的文本内容
+
+        Returns:
+            是否成功
+        """
+        url = f"{self.BASE_URL}/docx/v1/documents/{document_id}/blocks/{cell_block_id}/children"
+        data = {
+            "children": [
+                {
+                    "block_type": 2,
+                    "text": {
+                        "elements": [
+                            {
+                                "text_run": {
+                                    "content": content
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+        try:
+            resp = requests.post(url, headers=self._headers(), json=data)
+            resp.raise_for_status()
+            result = resp.json()
+
+            if result.get("code") != 0:
+                # 输出详细错误信息用于调试
+                print(f"填充单元格失败: code={result.get('code')}, msg={result.get('msg')}")
+                return False
+
+            return True
+        except Exception as e:
+            print(f"填充单元格异常: {e}")
+            return False
+
+    def fill_table(self, document_id: str, table_block_id: str, table_data: List[List[str]]) -> bool:
+        """
+        填充整个表格内容
+
+        Args:
+            document_id: 文档 ID
+            table_block_id: 表格块 ID
+            table_data: 二维数组，表格数据
+
+        Returns:
+            是否成功
+        """
+        try:
+            # 等待表格创建完成
+            time.sleep(0.5)
+
+            # 获取表格的所有单元格（飞书表格的子块直接就是单元格，按行优先顺序排列）
+            url = f"{self.BASE_URL}/docx/v1/documents/{document_id}/blocks/{table_block_id}/children"
+            resp = requests.get(url, headers=self._headers())
+            resp.raise_for_status()
+            result = resp.json()
+
+            if result.get("code") != 0:
+                print(f"警告: 获取表格单元格失败: {result.get('msg')}")
+                return False
+
+            cells = result.get("data", {}).get("items", [])
+
+            # 计算表格尺寸
+            rows = len(table_data)
+            cols = max(len(row) for row in table_data) if table_data else 0
+
+            # 按行优先顺序填充单元格
+            for row_idx in range(rows):
+                for col_idx in range(cols):
+                    cell_index = row_idx * cols + col_idx
+
+                    if cell_index >= len(cells):
+                        break
+
+                    if col_idx >= len(table_data[row_idx]):
+                        continue
+
+                    cell_block = cells[cell_index]
+                    cell_id = cell_block.get("block_id")
+                    content = table_data[row_idx][col_idx]
+
+                    if content:
+                        success = self.fill_table_cell(document_id, cell_id, content)
+                        if not success:
+                            print(f"警告: 填充单元格 [{row_idx}][{col_idx}] 失败")
+                        # 添加小延时避免 API 限流
+                        time.sleep(0.1)
+
+            return True
+        except Exception as e:
+            print(f"警告: 填充表格异常: {e}")
             return False
