@@ -20,17 +20,21 @@ class FeishuImageUploader:
     def __init__(self, auth: FeishuAuth):
         self.auth = auth
 
-    def upload(self, image_path: str, parent_node: str = "") -> Optional[str]:
+    def upload(self, image_path: str, parent_node: str) -> Optional[str]:
         """
         上传图片到飞书
 
         Args:
             image_path: 本地图片路径
-            parent_node: 父节点 token（可选）
+            parent_node: 图片块的 block_id（必需）
 
         Returns:
             file_token 或 None（失败时）
         """
+        if not parent_node:
+            print(f"警告: 缺少 parent_node 参数")
+            return None
+
         path = Path(image_path)
         if not path.exists():
             print(f"警告: 图片不存在 - {image_path}")

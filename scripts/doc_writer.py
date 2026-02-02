@@ -190,3 +190,75 @@ class FeishuDocWriter:
             return None
 
         return result.get("data", {}).get("node", {}).get("space_id")
+
+    def create_image_block(self, document_id: str, block_id: str) -> Optional[str]:
+        """
+        创建空的图片块占位符
+
+        Args:
+            document_id: 文档 ID
+            block_id: 父块 ID（通常是文档根 block_id）
+
+        Returns:
+            创建的图片块 block_id，失败返回 None
+        """
+        url = f"{self.BASE_URL}/docx/v1/documents/{document_id}/blocks/{block_id}/children"
+        data = {
+            "children": [
+                {
+                    "block_type": 27,
+                    "image": {}
+                }
+            ]
+        }
+
+        try:
+            resp = requests.post(url, headers=self._headers(), json=data)
+            resp.raise_for_status()
+            result = resp.json()
+
+            if result.get("code") != 0:
+                print(f"警告: 创建图片块失败: {result.get('msg')}")
+                return None
+
+            # 返回创建的图片块 block_id
+            children = result.get("data", {}).get("children", [])
+            if children:
+                return children[0].get("block_id")
+            return None
+        except Exception as e:
+            print(f"警告: 创建图片块异常: {e}")
+            return None
+
+    def replace_image_token(self, document_id: str, block_id: str, file_token: str) -> bool:
+        """
+        更新图片块的 token（使用 replace_image）
+
+        Args:
+            document_id: 文档 ID
+            block_id: 图片块 ID
+            file_token: 上传图片后获得的 file_token
+
+        Returns:
+            是否成功
+        """
+        url = f"{self.BASE_URL}/docx/v1/documents/{document_id}/blocks/{block_id}"
+        data = {
+            "replace_image": {
+                "token": file_token
+            }
+        }
+
+        try:
+            resp = requests.patch(url, headers=self._headers(), json=data)
+            resp.raise_for_status()
+            result = resp.json()
+
+            if result.get("code") != 0:
+                print(f"警告: 更新图片块失败: {result.get('msg')}")
+                return False
+
+            return True
+        except Exception as e:
+            print(f"警告: 更新图片块异常: {e}")
+            return False

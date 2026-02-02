@@ -5,7 +5,7 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from dotenv import load_dotenv
 
@@ -63,8 +63,8 @@ class FeishuWriter:
         # 用文件名作为标题（去掉 .md 扩展名）
         title = path.stem
 
-        # 解析 MD 内容
-        parser = MarkdownParser(self.uploader, str(path))
+        # 解析 MD 内容（不再传入 uploader）
+        parser = MarkdownParser(str(path))
         blocks = parser.parse(content)
 
         # 检查重复
@@ -103,16 +103,15 @@ class FeishuWriter:
             except Exception as e:
                 return {"success": False, "document_id": None, "message": f"创建知识库文档失败: {e}"}
 
-            # 写入内容
-            if not self.doc_writer.append_blocks(doc_id, doc_id, blocks):
-                return {"success": False, "document_id": doc_id, "message": "写入内容失败"}
+            # 写入内容（包含图片处理）
+            uploaded_images = self._write_content_with_images(doc_id, blocks, parser.pending_images)
 
             return {
                 "success": True,
                 "document_id": doc_id,
                 "node_token": node_token,
                 "message": f"成功创建文档: {title}",
-                "uploaded_images": parser.uploaded_images
+                "uploaded_images": uploaded_images
             }
         else:
             # 在云文档中创建
@@ -124,16 +123,73 @@ class FeishuWriter:
             except Exception as e:
                 return {"success": False, "document_id": None, "message": f"创建文档失败: {e}"}
 
-            # 写入内容
-            if not self.doc_writer.append_blocks(doc_id, block_id, blocks):
-                return {"success": False, "document_id": doc_id, "message": "写入内容失败"}
+            # 写入内容（包含图片处理）
+            uploaded_images = self._write_content_with_images(doc_id, blocks, parser.pending_images)
 
             return {
                 "success": True,
                 "document_id": doc_id,
                 "message": f"成功创建文档: {title}",
-                "uploaded_images": parser.uploaded_images
+                "uploaded_images": uploaded_images
             }
+
+    def _write_content_with_images(self, doc_id: str, blocks: List[Dict], pending_images: List) -> int:
+        """
+        写入内容，包含图片处理，保持原始顺序
+
+        Args:
+            doc_id: 文档 ID
+            blocks: 所有 blocks
+            pending_images: 待上传的图片列表 [(block_index, image_path), ...]
+
+        Returns:
+            成功上传的图片数量
+        """
+        uploaded_count = 0
+
+        # 构建图片索引映射
+        image_map = {idx: path for idx, path in pending_images}
+
+        # 按顺序处理每个 block
+        # 为了保持顺序，需要分批写入：遇到图片时先写入之前的普通块，再处理图片
+        current_batch = []
+
+        for i, block in enumerate(blocks):
+            if i in image_map:
+                # 遇到图片，先写入之前积累的普通块
+                if current_batch:
+                    self.doc_writer.append_blocks(doc_id, doc_id, current_batch)
+                    current_batch = []
+
+                # 处理图片
+                image_path = image_map[i]
+
+                # 1. 创建图片块占位符
+                image_block_id = self.doc_writer.create_image_block(doc_id, doc_id)
+                if not image_block_id:
+                    print(f"警告: 创建图片块失败 - {image_path}")
+                    continue
+
+                # 2. 上传图片
+                file_token = self.uploader.upload(image_path, image_block_id)
+                if not file_token:
+                    print(f"警告: 图片上传失败 - {image_path}")
+                    continue
+
+                # 3. 更新图片块的 token
+                if self.doc_writer.replace_image_token(doc_id, image_block_id, file_token):
+                    uploaded_count += 1
+                else:
+                    print(f"警告: 更新图片块失败 - {image_path}")
+            else:
+                # 普通块，加入当前批次
+                current_batch.append(block)
+
+        # 写入剩余的普通块
+        if current_batch:
+            self.doc_writer.append_blocks(doc_id, doc_id, current_batch)
+
+        return uploaded_count
 
     def update_document(self, document_id: str, md_path: str) -> Dict[str, Any]:
         """更新已有文档"""
@@ -146,19 +202,18 @@ class FeishuWriter:
             content = f.read()
 
         # 解析 MD 内容
-        parser = MarkdownParser(self.uploader, str(path))
+        parser = MarkdownParser(str(path))
         blocks = parser.parse(content)
 
         # 清空原内容
         self.doc_writer.delete_document_content(document_id)
 
-        # 写入新内容
-        if not self.doc_writer.append_blocks(document_id, document_id, blocks):
-            return {"success": False, "message": "更新内容失败"}
+        # 写入新内容（包含图片处理）
+        uploaded_images = self._write_content_with_images(document_id, blocks, parser.pending_images)
 
         return {
             "success": True,
             "document_id": document_id,
             "message": "文档更新成功",
-            "uploaded_images": parser.uploaded_images
+            "uploaded_images": uploaded_images
         }

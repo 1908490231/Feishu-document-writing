@@ -150,8 +150,9 @@ Space ID 是知识库的内部标识（数字），可通过以下方式获取�
 ### Q: 图片上传失败
 
 - 确保图片路径正确
-- 检查图片格式是否支持（jpg/png/gif）
-- 确认应用有云空间写入权限
+- 检查图片格式是否支持（jpg/png/gif/webp/bmp/tiff）
+- 确认应用有云空间写入权限（`drive:drive`）
+- 图片大小不超过 20MB
 
 ### Q: 网络图片无法显示
 
@@ -160,6 +161,79 @@ Space ID 是知识库的内部标识（数字），可通过以下方式获取�
 ### Q: block_type 相关错误
 
 飞书 API 要求 block_type 为数字类型。本工具已正确处理，如遇到此问题请更新到最新版本。
+
+## 开发难点与重点
+
+### 飞书 docx 文档图片上传流程
+
+飞书新版文档（docx）的图片上传与旧版文档不同，需要**三步操作**才能正确显示图片：
+
+#### 步骤 1：创建空图片块
+
+```bash
+POST /docx/v1/documents/{document_id}/blocks/{block_id}/children
+```
+
+```json
+{
+  "children": [
+    {
+      "block_type": 27,
+      "image": {}
+    }
+  ]
+}
+```
+
+返回值中包含新创建的图片块 `block_id`。
+
+#### 步骤 2：上传图片文件
+
+```bash
+POST /drive/v1/medias/upload_all
+```
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `file` | 二进制文件 | 图片文件内容 |
+| `file_name` | 文件名 | 如 `cover.png` |
+| `parent_type` | `docx_image` | **必须是 docx_image** |
+| `parent_node` | 图片块 ID | 步骤 1 返回的 block_id |
+| `size` | 文件大小 | 字节数 |
+
+返回值中包含 `file_token`。
+
+#### 步骤 3：更新图片块 token（关键！）
+
+```bash
+PATCH /docx/v1/documents/{document_id}/blocks/{block_id}
+```
+
+```json
+{
+  "replace_image": {
+    "token": "上一步返回的 file_token"
+  }
+}
+```
+
+**重点**：必须使用 `replace_image` 字段，而不是 `update_image` 或 `image`。
+
+#### 常见错误
+
+| 错误码 | 错误信息 | 原因 |
+|--------|----------|------|
+| 403 / 1061004 | forbidden | `parent_type` 不正确或缺少权限 |
+| 400 / 1061044 | parent node not exist | `parent_node` 无效或为空 |
+| 400 / 1770001 | invalid param | 更新图片块时使用了错误的字段名 |
+
+#### 为什么需要三步？
+
+1. **上传图片不会自动关联到图片块** - 即使 `parent_node` 正确，上传后图片块的 `token` 仍为空
+2. **更新块 API 只支持文本元素** - 标准的 `update_text_elements` 不支持图片
+3. **必须使用 `replace_image`** - 这是飞书专门为图片块设计的更新字段
+
+这个三步流程是飞书 docx 文档 API 的设计特点，官方文档中没有明确说明，需要通过实践摸索。
 
 ## 许可证
 

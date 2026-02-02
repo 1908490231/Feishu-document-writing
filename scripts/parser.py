@@ -7,22 +7,23 @@ Markdown 解析器模块
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-
-from .uploader import FeishuImageUploader
+from typing import Dict, List, Any, Optional, Tuple
 
 
 class MarkdownParser:
     """Markdown 解析器，转换为飞书 Block 格式"""
 
-    def __init__(self, uploader: FeishuImageUploader, md_file_path: str):
-        self.uploader = uploader
+    # 图片占位符标记
+    IMAGE_PLACEHOLDER = "__IMAGE_PLACEHOLDER__"
+
+    def __init__(self, md_file_path: str):
         self.md_dir = Path(md_file_path).parent
-        self.uploaded_images = 0
+        self.pending_images: List[Tuple[int, str]] = []  # [(block_index, image_path), ...]
 
     def parse(self, content: str) -> List[Dict[str, Any]]:
         """
         解析 Markdown 内容为飞书 Block 列表
+        图片会生成占位符，需要后续处理
 
         Returns:
             blocks 列表
@@ -59,7 +60,7 @@ class MarkdownParser:
             if img_match:
                 alt_text = img_match.group(1)
                 img_path = img_match.group(2)
-                block = self._create_image_block(img_path, alt_text)
+                block = self._create_image_block(img_path, alt_text, len(blocks))
                 if block:
                     blocks.append(block)
                 i += 1
@@ -248,8 +249,8 @@ class MarkdownParser:
             }
         }
 
-    def _create_image_block(self, img_path: str, alt_text: str) -> Optional[Dict]:
-        """创建图片块"""
+    def _create_image_block(self, img_path: str, alt_text: str, block_index: int) -> Optional[Dict]:
+        """创建图片块占位符，记录待上传的图片"""
         # 判断是网络图片还是本地图片
         if img_path.startswith(("http://", "https://")):
             # 网络图片暂时不支持直接使用，需要先下载再上传
@@ -262,17 +263,17 @@ class MarkdownParser:
         else:
             full_path = Path(img_path)
 
-        file_token = self.uploader.upload(str(full_path))
-        if not file_token:
+        if not full_path.exists():
+            print(f"警告: 图片不存在 - {full_path}")
             return None
 
-        self.uploaded_images += 1
+        # 记录待上传的图片
+        self.pending_images.append((block_index, str(full_path)))
 
+        # 返回占位符标记
         return {
-            "block_type": 27,
-            "image": {
-                "token": file_token
-            }
+            "block_type": self.IMAGE_PLACEHOLDER,
+            "image_path": str(full_path)
         }
 
     def _create_quote_block(self, text: str) -> Dict:
