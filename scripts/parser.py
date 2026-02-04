@@ -20,7 +20,8 @@ class MarkdownParser:
 
     def __init__(self, md_file_path: str):
         self.md_dir = Path(md_file_path).parent
-        self.pending_images: List[Tuple[int, str]] = []  # [(block_index, image_path), ...]
+        # pending_images 格式: [(block_index, image_path, is_url), ...]
+        self.pending_images: List[Tuple[int, str, bool]] = []
         self.pending_tables: List[Tuple[int, List[List[str]]]] = []  # [(block_index, table_data), ...]
 
     def parse(self, content: str) -> List[Dict[str, Any]]:
@@ -326,30 +327,21 @@ class MarkdownParser:
         }
 
     def _create_image_block(self, img_path: str, alt_text: str, block_index: int) -> Optional[Dict]:
-        """创建图片块占位符，记录待上传的图片"""
+        """
+        创建图片块占位符，记录待上传的图片
+        支持本地路径和网络 URL
+        """
         # 判断是网络图片还是本地图片
-        if img_path.startswith(("http://", "https://")):
-            # 网络图片暂时不支持直接使用，需要先下载再上传
-            print(f"提示: 网络图片需要手动处理 - {img_path}")
-            return None
+        is_url = img_path.startswith(("http://", "https://"))
 
-        # 处理本地图片路径
-        if not os.path.isabs(img_path):
-            full_path = self.md_dir / img_path
-        else:
-            full_path = Path(img_path)
-
-        if not full_path.exists():
-            print(f"警告: 图片不存在 - {full_path}")
-            return None
-
-        # 记录待上传的图片
-        self.pending_images.append((block_index, str(full_path)))
+        # 记录待上传的图片（保持原始路径，uploader 会自动处理）
+        self.pending_images.append((block_index, img_path, is_url))
 
         # 返回占位符标记
         return {
             "block_type": self.IMAGE_PLACEHOLDER,
-            "image_path": str(full_path)
+            "image_path": img_path,
+            "is_url": is_url
         }
 
     def _create_quote_block(self, text: str) -> Dict:

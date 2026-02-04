@@ -28,7 +28,8 @@ class FeishuWriter:
             raise Exception("请在 .env 文件中配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
 
         self.auth = FeishuAuth(app_id, app_secret)
-        self.uploader = FeishuImageUploader(self.auth)
+        # uploader 会在写入时初始化，因为需要知道 md_file_path
+        self.uploader = None
         self.doc_writer = FeishuDocWriter(self.auth)
 
     def write_file(
@@ -104,7 +105,7 @@ class FeishuWriter:
                 return {"success": False, "document_id": None, "message": f"创建知识库文档失败: {e}"}
 
             # 写入内容（包含图片和表格处理）
-            uploaded_images = self._write_content_with_images(doc_id, blocks, parser.pending_images, parser.pending_tables)
+            uploaded_images = self._write_content_with_images(str(path), doc_id, blocks, parser.pending_images, parser.pending_tables)
 
             return {
                 "success": True,
@@ -124,7 +125,7 @@ class FeishuWriter:
                 return {"success": False, "document_id": None, "message": f"创建文档失败: {e}"}
 
             # 写入内容（包含图片和表格处理）
-            uploaded_images = self._write_content_with_images(doc_id, blocks, parser.pending_images, parser.pending_tables)
+            uploaded_images = self._write_content_with_images(str(path), doc_id, blocks, parser.pending_images, parser.pending_tables)
 
             return {
                 "success": True,
@@ -133,14 +134,15 @@ class FeishuWriter:
                 "uploaded_images": uploaded_images
             }
 
-    def _write_content_with_images(self, doc_id: str, blocks: List[Dict], pending_images: List, pending_tables: List) -> int:
+    def _write_content_with_images(self, md_path: str, doc_id: str, blocks: List[Dict], pending_images: List, pending_tables: List) -> int:
         """
         写入内容，包含图片和表格处理，保持原始顺序
 
         Args:
+            md_path: Markdown 文件路径（用于解析相对图片路径）
             doc_id: 文档 ID
             blocks: 所有 blocks
-            pending_images: 待上传的图片列表 [(block_index, image_path), ...]
+            pending_images: 待上传的图片列表 [(block_index, image_path, is_url), ...]
             pending_tables: 待处理的表格列表 [(block_index, table_data), ...]
 
         Returns:
@@ -148,8 +150,16 @@ class FeishuWriter:
         """
         uploaded_count = 0
 
-        # 构建图片索引映射
-        image_map = {idx: path for idx, path in pending_images}
+        # 初始化 uploader（传入 md_path 用于处理相对路径）
+        if not self.uploader:
+            from pathlib import Path
+            self.uploader = FeishuImageUploader(self.auth, Path(md_path).parent)
+        else:
+            from pathlib import Path
+            self.uploader.md_dir = Path(md_path).parent
+
+        # 构建图片索引映射（新的三元组格式）
+        image_map = {idx: (path, is_url) for idx, path, is_url in pending_images}
         # 构建表格索引映射
         table_map = {idx: data for idx, data in pending_tables}
 
@@ -165,7 +175,7 @@ class FeishuWriter:
                     current_batch = []
 
                 # 处理图片
-                image_path = image_map[i]
+                image_path, is_url = image_map[i]
 
                 # 1. 创建图片块占位符
                 image_block_id = self.doc_writer.create_image_block(doc_id, doc_id)
@@ -173,7 +183,7 @@ class FeishuWriter:
                     print(f"警告: 创建图片块失败 - {image_path}")
                     continue
 
-                # 2. 上传图片
+                # 2. 上传图片（uploader 会自动处理本地/网络图片）
                 file_token = self.uploader.upload(image_path, image_block_id)
                 if not file_token:
                     print(f"警告: 图片上传失败 - {image_path}")
@@ -182,6 +192,7 @@ class FeishuWriter:
                 # 3. 更新图片块的 token
                 if self.doc_writer.replace_image_token(doc_id, image_block_id, file_token):
                     uploaded_count += 1
+                    print(f"  [图片] 上传成功: {image_path[:60]}{'...' if len(image_path) > 60 else ''}")
                 else:
                     print(f"警告: 更新图片块失败 - {image_path}")
 
@@ -232,7 +243,7 @@ class FeishuWriter:
         self.doc_writer.delete_document_content(document_id)
 
         # 写入新内容（包含图片和表格处理）
-        uploaded_images = self._write_content_with_images(document_id, blocks, parser.pending_images, parser.pending_tables)
+        uploaded_images = self._write_content_with_images(str(path), document_id, blocks, parser.pending_images, parser.pending_tables)
 
         return {
             "success": True,
