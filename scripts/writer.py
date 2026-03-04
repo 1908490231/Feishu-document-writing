@@ -68,6 +68,10 @@ class FeishuWriter:
         parser = MarkdownParser(str(path))
         blocks = parser.parse(content)
 
+        # folder_token 回退到环境变量
+        if target == "folder" and not folder_token:
+            folder_token = os.getenv("FEISHU_DEFAULT_FOLDER_TOKEN")
+
         # 检查重复
         existing_doc = None
         if check_duplicate and folder_token:

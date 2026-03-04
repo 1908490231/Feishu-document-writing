@@ -59,8 +59,8 @@ def main():
     args = arg_parser.parse_args()
 
     # 验证参数
-    if args.target == "folder" and not args.folder_token:
-        print("错误: 目标为 folder 时必须指定 --folder-token")
+    if args.target == "folder" and not args.folder_token and not os.getenv("FEISHU_DEFAULT_FOLDER_TOKEN"):
+        print("错误: 目标为 folder 时必须指定 --folder-token 或在 .env 中配置 FEISHU_DEFAULT_FOLDER_TOKEN")
         sys.exit(1)
 
     if args.target == "wiki" and not args.wiki_token and not os.getenv("FEISHU_DEFAULT_WIKI_SPACE_ID") and not os.getenv("FEISHU_DEFAULT_WIKI_NODE_TOKEN"):
@@ -150,6 +150,13 @@ def main():
                 success_count += 1
                 total_images += result.get("uploaded_images", 0)
                 print(f"  [OK] {result.get('message')}")
+                # 输出文档链接
+                doc_id = result.get("document_id")
+                node_token = result.get("node_token")
+                if node_token:
+                    print(f"  链接: https://feishu.cn/wiki/{node_token}")
+                elif doc_id:
+                    print(f"  链接: https://feishu.cn/docx/{doc_id}")
             else:
                 fail_count += 1
                 print(f"  [FAIL] {result.get('message')}")
