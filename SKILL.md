@@ -85,10 +85,10 @@ python -m scripts.feishu_writer ./doc.md --target space
 python -m scripts.feishu_writer ./doc.md --target folder
 
 # 写入到指定文件夹
-python -m scripts.feishu_writer ./doc.md --target folder --folder-token fldcnxxxxxx
+python -m scripts.feishu_writer ./doc.md --target folder --folder-token LlqxfXXXXXXXXXX
 
 # 批量处理目录下所有 MD 文件
-python -m scripts.feishu_writer ./docs/ --target folder --folder-token fldcnxxxxxx
+python -m scripts.feishu_writer ./docs/ --target folder --folder-token LlqxfXXXXXXXXXX
 ```
 
 ## 环境变量配置
@@ -114,7 +114,7 @@ FEISHU_DEFAULT_FOLDER_TOKEN=默认文件夹folder_token
 
 | Token 类型 | 获取方式 | 格式特征 |
 |-----------|---------|---------|
-| folder_token | 浏览器地址栏：`https://xxx.feishu.cn/drive/folder/fldcnXXX` | 以 `fldcn` 开头 |
+| folder_token | 浏览器地址栏：`https://xxx.feishu.cn/drive/folder/XXX` | 字母数字混合字符串 |
 | node_token | 浏览器地址栏：`https://xxx.feishu.cn/wiki/XXX` | `/wiki/` 后的字符串 |
 | space_id | 程序自动通过 node_token 查询，无需手动获取 | 数字 |
 
@@ -139,5 +139,6 @@ FEISHU_DEFAULT_FOLDER_TOKEN=默认文件夹folder_token
 常见问题速查：
 - **"获取 token 失败"** → 检查 App ID / App Secret
 - **"permission denied"** → 应用权限未开通或未添加为协作者
-- **"node permission denied"** → 应用未被添加为知识库协作者（参见 `references/setup-guide.md` 第 4 节）
+- **"permission denied" (folder 模式)** → 云文件夹需通过群组中介方式授权（参见 `references/setup-guide.md` 第 4.1 节）
+- **"node permission denied"** → 应用未被添加为知识库协作者（参见 `references/setup-guide.md` 第 4.2 节）
 - **图片上传失败** → 检查图片格式和 `drive:drive` 权限

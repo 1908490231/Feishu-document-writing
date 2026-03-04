@@ -29,13 +29,13 @@ def main():
   python feishu_writer.py ./doc.md
 
   # 写入到指定文件夹
-  python feishu_writer.py ./doc.md --target folder --folder-token fldcnxxxxxx
+  python feishu_writer.py ./doc.md --target folder --folder-token LlqxfXXXXXX
 
   # 写入到知识库
   python feishu_writer.py ./doc.md --target wiki --wiki-token wikcnxxxxxx
 
   # 批量写入
-  python feishu_writer.py ./docs/ --target folder --folder-token fldcnxxxxxx
+  python feishu_writer.py ./docs/ --target folder --folder-token LlqxfXXXXXX
         """
     )
 

@@ -6,7 +6,7 @@
 
 | Token 名称 | 用途 | 格式特征 | 使用场景 |
 |-----------|------|---------|---------|
-| `folder_token` | 指定云空间文件夹 | 以 `fldcn` 开头 | `--target folder` |
+| `folder_token` | 指定云空间文件夹 | 字母数字混合字符串 | `--target folder` |
 | `node_token` | 指定知识库节点 | 字母数字混合字符串 | `--target wiki` |
 | `space_id` | 知识库内部标识 | 纯数字 | 自动查询，一般无需手动获取 |
 
@@ -21,21 +21,21 @@
 1. 在飞书中打开目标文件夹
 2. 查看浏览器地址栏，URL 格式为：
    ```
-   https://xxx.feishu.cn/drive/folder/fldcnXXXXXXXXXX
+   https://xxx.feishu.cn/drive/folder/LlqxfXXXXXXXXXX
    ```
 3. URL 中 `/folder/` 后面的字符串即为 `folder_token`
 
 ### 格式特征
 
-- 以 `fldcn` 开头
-- 示例：`fldcnZF1234abcd5678`
+- 字母数字混合字符串
+- 示例：`LlqxfXt5jlyqdnd3VYzcASuOnEc`
 
 ### 配置为默认值
 
 如果你经常写入同一个文件夹，可以将 token 配置在 `.env` 中：
 
 ```dotenv
-FEISHU_DEFAULT_FOLDER_TOKEN=fldcnZF1234abcd5678
+FEISHU_DEFAULT_FOLDER_TOKEN=LlqxfXt5jlyqdnd3VYzcASuOnEc
 ```
 
 配置后，使用 `--target folder` 时无需再传 `--folder-token` 参数。
@@ -100,5 +100,5 @@ FEISHU_DEFAULT_WIKI_SPACE_ID=7123456789
 
 | 你想做什么 | 需要的 Token | URL 中的位置 | 格式检查 |
 |-----------|-------------|-------------|---------|
-| 写入到文件夹 | folder_token | `/drive/folder/` 后面 | 以 `fldcn` 开头 |
+| 写入到文件夹 | folder_token | `/drive/folder/` 后面 | 字母数字混合字符串 |
 | 写入到知识库 | node_token | `/wiki/` 后面 | 字母数字混合字符串 |
