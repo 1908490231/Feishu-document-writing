@@ -30,8 +30,8 @@ Feishu-document-writing/
 
 | 文件 | 类名 | 职责 |
 |------|------|------|
-| `auth.py` | `FeishuAuth` | 管理飞书 API 认证，获取 tenant_access_token |
-| `uploader.py` | `FeishuImageUploader` | 上传本地图片到飞书，返回 file_token |
+| `auth.py` | `FeishuAuth` | 管理飞书 API 认证，获取 tenant_access_token，支持 token 过期自动刷新和线程安全 |
+| `uploader.py` | `FeishuImageUploader` | 上传本地/网络图片到飞书，返回 file_token |
 | `parser.py` | `MarkdownParser` | 解析 MD 为飞书 Block 格式，处理内联样式 |
 | `doc_writer.py` | `FeishuDocWriter` | 创建/更新文档，管理 Block 内容，写入知识库 |
 | `writer.py` | `FeishuWriter` | 主入口类，整合所有功能 |
@@ -71,6 +71,12 @@ Feishu-document-writing/
 6. **知识库文档需要直接在知识库中创建**，而不是先创建再移动
 7. **应用必须被添加为目标知识库的协作者**才有写入权限
 8. **表格单元格按行优先顺序排列**，不是嵌套的行-单元格结构
+9. **所有 HTTP 请求均设置 30 秒超时**，避免无限阻塞
+10. **token 支持过期自动刷新**，距离过期不足 60 秒时自动重新获取
+11. **token 操作线程安全**，使用 threading.Lock 保护
+12. **文件夹列表支持分页**，通过 page_token 遍历所有页面
+13. **删除块时检查响应**，失败时记录日志并返回 False
+14. **批处理中单文件异常不会中断**，每个文件独立 try/except 保护
 
 ## 知识库权限配置
 
@@ -82,7 +88,7 @@ Feishu-document-writing/
 
 ## 环境变量配置
 
-```
+```dotenv
 FEISHU_APP_ID=应用ID
 FEISHU_APP_SECRET=应用密钥
 FEISHU_DEFAULT_WIKI_SPACE_ID=默认知识库space_id（可选）
