@@ -46,6 +46,7 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+代传入/
 
 # 数据文件夹（保留目录，忽略内容）
 data/*
