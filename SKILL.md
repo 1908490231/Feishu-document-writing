@@ -11,14 +11,11 @@ allowed-tools: Read, Write, Edit, Bash
 
 ## 前置条件
 
-在执行本技能之前，请按以下顺序检查：
+本技能开箱即用，执行前无需手动检查配置文件。如果执行过程中出现错误：
 
-1. **检查依赖是否安装**：运行 `pip install -r requirements.txt`
-2. **检查 .env 文件是否存在且配置正确**：
-   - 必须包含 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET`
-   - 如果用户要写入知识库，还需要 `FEISHU_DEFAULT_WIKI_NODE_TOKEN` 或通过参数传入
-   - 如果用户要写入指定文件夹，还需要 `FEISHU_DEFAULT_FOLDER_TOKEN` 或通过参数传入
-3. **如果用户尚未配置**，请引导用户阅读 `references/setup-guide.md` 完成飞书应用创建和权限开通
+- **认证失败（获取 token 失败）**：请确认 `.env` 文件中已正确配置 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET`，配置说明见本文件「环境变量配置」章节
+- **依赖缺失（ModuleNotFoundError）**：运行 `pip install -r requirements.txt` 安装依赖
+- **首次使用或需要创建飞书应用**：请参阅 `references/setup-guide.md` 完成飞书应用创建和权限开通
 
 ### 所需飞书应用权限
 
