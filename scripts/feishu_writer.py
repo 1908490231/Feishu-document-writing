@@ -52,11 +52,23 @@ def main():
     arg_parser.add_argument(
         "--on-duplicate",
         choices=["ask", "update", "skip", "new"],
-        default="ask",
-        help="重复文档处理方式 (默认: ask)"
+        default="new",
+        help="重复文档处理方式 (默认: new)"
     )
 
     args = arg_parser.parse_args()
+
+    # 自动路由：用户未指定 --target 时，根据参数和 .env 配置自动选择
+    user_specified_target = args.target != "space" or "--target" in sys.argv or "-t" in sys.argv
+    if not user_specified_target:
+        if args.folder_token:
+            args.target = "folder"
+        elif args.wiki_token:
+            args.target = "wiki"
+        elif os.getenv("FEISHU_DEFAULT_FOLDER_TOKEN"):
+            args.target = "folder"
+        elif os.getenv("FEISHU_DEFAULT_WIKI_NODE_TOKEN") or os.getenv("FEISHU_DEFAULT_WIKI_SPACE_ID"):
+            args.target = "wiki"
 
     # 验证参数
     if args.target == "folder" and not args.folder_token and not os.getenv("FEISHU_DEFAULT_FOLDER_TOKEN"):
@@ -92,6 +104,7 @@ def main():
     success_count = 0
     fail_count = 0
     total_images = 0
+    duplicate_files = []
 
     for i, file in enumerate(files, 1):
         print(f"正在处理 ({i}/{len(files)}): {file.name}")
@@ -122,6 +135,7 @@ def main():
                     if choice == "1":
                         result = writer.update_document(existing_id, str(file))
                     elif choice == "2":
+                        duplicate_files.append(doc_title)
                         result = writer.write_file(
                             str(file),
                             target=args.target,
@@ -135,6 +149,8 @@ def main():
                 elif args.on_duplicate == "update":
                     result = writer.update_document(existing_id, str(file))
                 elif args.on_duplicate == "new":
+                    duplicate_files.append(doc_title)
+                    print(f"  发现同名文档「{doc_title}」，自动创建新文档")
                     result = writer.write_file(
                         str(file),
                         target=args.target,
@@ -170,6 +186,8 @@ def main():
     print(f"成功: {success_count} 个文档")
     if fail_count:
         print(f"失败: {fail_count} 个文档")
+    if duplicate_files:
+        print(f"重复文件（已自动新建）: {', '.join(duplicate_files)}")
     print(f"已上传图片: {total_images} 张")
 
 
